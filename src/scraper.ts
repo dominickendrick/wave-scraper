@@ -8,8 +8,8 @@ export type Time = {
 }
 
 export enum Side {
-  Left,
-  Right
+  Left = "left",
+  Right = "right"
 }
 
 export type Slot = {
