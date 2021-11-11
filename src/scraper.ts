@@ -143,7 +143,7 @@ const buildDayData = (availability: string[], timeSlot: string): Slot[] => {
       date: timeData.date,
       time: timeData.time,
       availiability: parseInt(value || '0') ,
-      side: side.toString }
+      side: side }
   })
   return slot;
 }
