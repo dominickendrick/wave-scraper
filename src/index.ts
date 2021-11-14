@@ -19,7 +19,8 @@ type PromiseSettledResult<T> = PromiseFulfilledResult<T> | PromiseRejectedResult
 
 type CalendarData = {
   classNames: string,
-  date: string
+  date: string,
+  sessionType: SessionType
 }
 
 class WaveScraper extends Command {
@@ -51,6 +52,7 @@ class WaveScraper extends Command {
   ]
 
   async run() {
+    process.setMaxListeners(Infinity)
     //parse command line arguments
     const {args, flags} = this.parse(WaveScraper)
 
@@ -64,22 +66,19 @@ class WaveScraper extends Command {
 
     this.log(`dates are start date: ${startDate.toLocaleDateString('en-gb')} and end date: ${endDate.toLocaleDateString('en-gb')}`)
 
-    const days: CalendarData[] = await getAllSurfDaysThisMonth();
-    //make empty slots for all inactive or sold out ones
+    //This goes to the main booking page for the session type you are interested in ie Advanced etc, and get all the available days for the current month
+    const days: CalendarData[] = await getAllSurfDaysThisMonth(SessionTypeUrl.Advanced, SessionType.Advanced);
 
     //filter only active ones
     const availableDays = days.filter((dayArray) => { return dayArray.classNames?.includes('available')})
 
-    console.log(availableDays, "days")
-    //get all advanced sessions for that day
+    //Go through each available day and get each timeslot data for that day for the session type.
     const surfData = availableDays.map((day) => {
       console.log(day.date, "day.date")
       return getDayData(day.date || startDate.toLocaleDateString('en-gb'), SessionTypeUrl.Advanced, SessionType.Advanced);
     })
 
     const allSurfData = await Promise.allSettled(surfData);
-
-    console.log(allSurfData)
 
     const successSurfData = allSurfData.filter((items) => {return items.status === 'fulfilled'})
 
@@ -88,29 +87,33 @@ class WaveScraper extends Command {
         return item.value?.sessions
       }
     );
-    console.log(successfullSurfDataValues,"successfullSurfDataValues")
 
     const dayData: DayData = {
       sessions: successfullSurfDataValues.flat(1)
     }
 
-    fs.writeFile('./currentSurfData.json', JSON.stringify(dayData, null, 2), err => {
-      if (err) {
-        console.error(err)
-        return
-      }
-    })
+    writeDataToFile(dayData);
+
     this.exit();
 
   }
 }
 
-const getAllSurfDaysThisMonth = async (): Promise<CalendarData[]> => {
+const writeDataToFile = (dayData: DayData): void => {
+  fs.writeFile('./currentSurfData.json', JSON.stringify(dayData, null, 2), err => {
+    if (err) {
+      console.error(err)
+      return
+    }
+  })
+}
+
+const getAllSurfDaysThisMonth = async (sessionTypeUrl: SessionTypeUrl, sessionType: SessionType): Promise<CalendarData[]> => {
   // get all the days for the month
   //document.querySelectorAll('.datepicker-days td:not(.disabled):not(.soldout):not(.new)')
   const browser = await puppeteer.launch({ headless: HEADLESS });
   const page = await browser.newPage();
-  await page.goto('https://bookings.thewave.com/twb_b2c/advanced.html');
+  await page.goto(`https://bookings.thewave.com/twb_b2c/${sessionTypeUrl}`);
   const daysThisMonth = await page.$$eval('.datepicker-days td', (element) => {
     return element.map(nodes => {
       return {
@@ -140,12 +143,9 @@ const getAllSurfDaysThisMonth = async (): Promise<CalendarData[]> => {
     return {
       classNames: dayThisMonth.classNames || '',
       date: dayThisMonth.date || '',
+      sessionType: sessionType
     };
   })
-
 }
-
-
-
 
 export = WaveScraper
