@@ -1,5 +1,6 @@
 import { ca } from 'date-fns/locale';
 import * as puppeteer from 'puppeteer'
+import { parseDate } from './utils';
 
 export const HEADLESS = true;
 
@@ -47,7 +48,7 @@ export type Slot = {
 export type SoldOut = {};
 
 export type DayData = {
-  sessions: Slot []
+  sessions: Slot[]
 }
 
 const getVisibleDaysToSelect = async (date: string, sessionTypeUrl: SessionTypeUrl): Promise<(string | null)[] | undefined> => {
@@ -71,7 +72,7 @@ const getVisibleDaysToSelect = async (date: string, sessionTypeUrl: SessionTypeU
       return Array.from(document.querySelectorAll('div#calendar-dp div:not(.d-none).daybox ul.calendar-time form')).map((values) => {return values.getAttribute('id')})
     }
   });
-  browser.close()
+  await browser.close()
   return returnItems;
 }
 
@@ -89,10 +90,9 @@ const getSingleSlotData = async(date: string, id: string, sessionTypeUrl: Sessio
 
     await page.click(`#${id} input[type=submit]`);
 
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(1000);
 
     await page.waitForSelector('div#tickets-list input.remaining');
-    await page.waitForTimeout(1000);
 
     const availabilityForFirstTimeSlotOfDay = await page.$$eval('div#tickets-list input.remaining', (htmlNode) => {
       return htmlNode.map(nodes => {
@@ -102,19 +102,26 @@ const getSingleSlotData = async(date: string, id: string, sessionTypeUrl: Sessio
     const timeSlot = await page.$eval('#datetimeselected', (htmlNode) => {return htmlNode.textContent}) || '';
     const availabilityWithoutNulls = availabilityForFirstTimeSlotOfDay.map((value) => {return value || ''});
     const slot: Slot[] = buildDayData(availabilityWithoutNulls, timeSlot, sessionType);
+    console.log(slot, "slot Data")
+
+    await browser.close();
 
     return slot;
   } catch (error) {
     console.log(error, "an error occured")
-    return <Slot>{}
+    return [{
+      availiability: 0,
+      sessionType: sessionType,
+      date: parseDate(date).toISOString(),
+      time: parseDate(date).toISOString(),
+      side: Side.Left
+    }]
   }
 }
 
 export const getDayData = async (date: string, sessionTypeUrl: SessionTypeUrl, sessionType: SessionType): Promise<DayData> => {
   const visibleFormIds = await getVisibleDaysToSelect(date, sessionTypeUrl);
   const visibleFormIdsNotNull = visibleFormIds || []
-
-  const browser = await puppeteer.launch({ headless: HEADLESS });
 
   const slots = visibleFormIdsNotNull.map((currentId) => {
     return getSingleSlotData(date, currentId || '', sessionTypeUrl, sessionType)
