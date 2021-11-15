@@ -88,15 +88,33 @@ class WaveScraper extends Command {
       }
     );
 
+    console.log(successfullSurfDataValues, "successfullSurfDataValues");
+
+    const errors = allSurfData
+      .filter((items) => {return items.status === 'rejected'})
+      .map((items) => {
+        const item = items as PromiseRejectedResult;
+        return item.reason
+      });
+
+      console.log(errors, "this is final errors !")
     const dayData: DayData = {
-      sessions: successfullSurfDataValues.flat(1)
+      sessions: successfullSurfDataValues.flat(2)
     }
 
+    console.log(dayData, "this is final day data !")
+
+
     writeDataToFile(dayData);
+    logErrors(errors);
 
     this.exit();
 
   }
+}
+
+const logErrors = (errors: any[]):void => {
+  console.log(errors);
 }
 
 const writeDataToFile = (dayData: DayData): void => {
@@ -110,7 +128,7 @@ const writeDataToFile = (dayData: DayData): void => {
 
 const getAllSurfDaysThisMonth = async (sessionTypeUrl: SessionTypeUrl, sessionType: SessionType): Promise<CalendarData[]> => {
   // get all the days for the month
-  //document.querySelectorAll('.datepicker-days td:not(.disabled):not(.soldout):not(.new)')
+
   const browser = await puppeteer.launch({ headless: HEADLESS });
   const page = await browser.newPage();
   await page.goto(`https://bookings.thewave.com/twb_b2c/${sessionTypeUrl}`);

@@ -1,4 +1,4 @@
-import { ca } from 'date-fns/locale';
+import { format } from 'date-fns';
 import * as puppeteer from 'puppeteer'
 import { parseDate } from './utils';
 
@@ -62,10 +62,10 @@ const getVisibleDaysToSelect = async (date: string, sessionTypeUrl: SessionTypeU
   //   await page.waitForTimeout(1000);
   // }
 
-  const datebutton = await page.$(`td[data-date="${date}"]`)
-  datebutton?.click();
+  await page.waitForSelector(`td[data-date="${date}"]`)
+  await page.click(`td[data-date="${date}"]`);
 
-  await page.waitForTimeout(500);
+  await page.waitForSelector('div#calendar-dp div:not(.d-none).daybox ul.calendar-time form');
 
   const returnItems =  await page.evaluate(() => {
     if (document) {
@@ -76,46 +76,43 @@ const getVisibleDaysToSelect = async (date: string, sessionTypeUrl: SessionTypeU
   return returnItems;
 }
 
-const getSingleSlotData = async(date: string, id: string, sessionTypeUrl: SessionTypeUrl, sessionType: SessionType) => {
+export const getSingleSlotData = async(date: string, id: string, sessionTypeUrl: SessionTypeUrl, sessionType: SessionType) => {
   try {
     const browser = await puppeteer.launch({ headless: HEADLESS });
     const page = await browser.newPage();
     await page.goto(`https://bookings.thewave.com/twb_b2c/${sessionTypeUrl}`);
-    await page.waitForTimeout(500);
-
-    const datebutton = await page.$(`td[data-date="${date}"]`)
-    datebutton?.click();
-
-    await page.waitForTimeout(500);
-
-    await page.click(`#${id} input[type=submit]`);
-
     await page.waitForTimeout(1000);
 
-    await page.waitForSelector('div#tickets-list input.remaining');
+    await page.waitForSelector(`td[data-date="${date}"]`)
+    await page.click(`td[data-date="${date}"]`);
 
-    const availabilityForFirstTimeSlotOfDay = await page.$$eval('div#tickets-list input.remaining', (htmlNode) => {
-      return htmlNode.map(nodes => {
-        return nodes.getAttribute('value');
+    const soldOut = await page.$(`#${id} .calendar-time__item--soldout`);
+
+    if (soldOut) {
+      const sessionTime = await page.$eval(`#${id} input[type=submit]`, (node) => { return node.getAttribute("value")})
+      return getEmptySlot(date, sessionTime || '', sessionType)
+    } else {
+      await page.waitForSelector(`#${id} li.ajax-submit`);
+      await page.click(`#${id} li.ajax-submit`, {clickCount: 2} );
+      await page.waitForSelector('div#tickets-list input.remaining');
+
+      const availabilityForFirstTimeSlotOfDay = await page.$$eval('div#tickets-list input.remaining', (htmlNode) => {
+        return htmlNode.map(nodes => {
+          return nodes.getAttribute('value');
+        });
       });
-    });
-    const timeSlot = await page.$eval('#datetimeselected', (htmlNode) => {return htmlNode.textContent}) || '';
-    const availabilityWithoutNulls = availabilityForFirstTimeSlotOfDay.map((value) => {return value || ''});
-    const slot: Slot[] = buildDayData(availabilityWithoutNulls, timeSlot, sessionType);
-    console.log(slot, "slot Data")
+      const timeSlot = await page.$eval('#datetimeselected', (htmlNode) => {return htmlNode.textContent}) || '';
+      const availabilityWithoutNulls = availabilityForFirstTimeSlotOfDay.map((value) => {return value || ''});
+      const slot: Slot[] = buildDayData(availabilityWithoutNulls, timeSlot, sessionType);
+      console.log(slot, "slot Data")
+      await browser.close();
 
-    await browser.close();
+      return slot;
+    }
 
-    return slot;
   } catch (error) {
-    console.log(error, "an error occured")
-    return [{
-      availiability: 0,
-      sessionType: sessionType,
-      date: parseDate(date).toISOString(),
-      time: parseDate(date).toISOString(),
-      side: Side.Left
-    }]
+    console.log(error, date, id, sessionTypeUrl, sessionType)
+    return [getEmptySlot(date, "asd",  sessionType)]
   }
 }
 
@@ -163,4 +160,15 @@ const buildDayData = (availability: string[], timeSlot: string, sessionType: Ses
   });
 
   return slot;
+}
+
+const getEmptySlot = (date: string, sessionTime: string, sessionType: SessionType):Slot => {
+  console.log(date, "this is error date")
+  return {
+    availiability: 0,
+    sessionType: sessionType,
+    date: format(new Date(parseInt(date)), "do MMMM yyyy"),
+    time: sessionTime,
+    side: Side.Left
+  }
 }

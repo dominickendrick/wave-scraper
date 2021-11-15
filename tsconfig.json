@@ -15,5 +15,5 @@
   },
   "include": [
     "src/**/*"
-  ]
+, "test/scraper.test.js"  ]
 }
